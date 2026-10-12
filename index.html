@@ -58,12 +58,14 @@ ul.pts{margin:0;padding-left:20px}ul.pts li{margin:6px 0}
 .msg.u{background:var(--pur);color:#fff;margin-left:auto;border-bottom-right-radius:4px}
 .msg.a{background:#fff;border-bottom-left-radius:4px}
 .warn{background:#fff6dc;border:1px solid var(--gold)}
+.av{border-radius:50%;background:var(--pur);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;overflow:hidden;flex:none;border:3px solid #ffffff66}.av img{width:100%;height:100%;object-fit:cover}
 #busy{position:fixed;inset:0;background:#12194acc;color:#fff;display:none;align-items:center;justify-content:center;flex-direction:column;z-index:20;text-align:center;padding:20px}
 #busy.on{display:flex}.spin{width:44px;height:44px;border:5px solid #ffffff44;border-top-color:#fff;border-radius:50%;animation:s 1s linear infinite;margin-bottom:12px}@keyframes s{to{transform:rotate(360deg)}}
 #toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 18px;border-radius:20px;z-index:30;display:none;max-width:88%;text-align:center}
 </style></head><body>
 <div id="app"></div><div id="busy"><div class="spin"></div><div id="bmsg"></div></div><div id="toast"></div>
 <input type="file" id="gal" accept="image/*" multiple hidden onchange="addFiles(this.files)">
+<input type="file" id="pic" accept="image/*" hidden onchange="picFile(this.files[0])">
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -96,7 +98,7 @@ function render(){
 function vProfile(){
  if(!PF)PF=S.profile?JSON.parse(JSON.stringify(S.profile)):{name:'',school:'',cls:6,subjects:SUBJ(6)};
  const all=[...new Set([...SUBJ(PF.cls),...PF.subjects])];
- return`<div class="card"><label>Your name</label><input value="${esc(PF.name)}" oninput="PF.name=this.value" placeholder="e.g. Rajvika">
+ return`<div class="card"><div style="display:flex;justify-content:center">${av(PF.photo,PF.name,96)}</div><div style="text-align:center"><button class="btn sm sec" onclick="pickPhoto()">📷 ${PF.photo?'Change':'Add'} photo</button>${PF.photo?'<button class="btn sm red" onclick="PF.photo=\'\';render()">Remove</button>':''}</div><label>Your name</label><input value="${esc(PF.name)}" oninput="PF.name=this.value" placeholder="e.g. Rajvika">
  <label>School</label><input value="${esc(PF.school)}" oninput="PF.school=this.value" placeholder="School name">
  <label>Class</label><select onchange="PF.cls=+this.value;PF.subjects=SUBJ(PF.cls);render()">${[...Array(12)].map((_,i)=>`<option ${PF.cls===i+1?'selected':''} value="${i+1}">Class ${i+1}</option>`).join('')}</select>
  <label>My subjects (tap to select)</label><div class="chips">${all.map(s=>`<button class="chip ${PF.subjects.includes(s)?'on':''}" onclick="togSub(this.dataset.s)" data-s="${esc(s)}">${esc(s)}</button>`).join('')}</div>
@@ -108,7 +110,7 @@ function saveProfile(){if(!PF.name.trim())return toast('Please type your name');
  S.profile=PF;PF=null;persist();toast('Profile saved');tab('home')}
 /* HOME */
 function vHome(){const p=S.profile,st=stats();
- return`<div class="hero"><h2>Hello, ${esc(p.name)}!</h2><p>Class ${p.cls} · ${esc(p.school||'Student')}</p></div>
+ return`<div class="hero row" style="justify-content:flex-start;gap:14px">${av(p.photo,p.name,70)}<div><h2>Hello, ${esc(p.name)}!</h2><p>Class ${p.cls} · ${esc(p.school||'Student')}</p></div></div>
  ${S.key?'':`<div class="card warn"><b>One-time setup needed</b><div class="mut">Add your Claude API key so the AI can read photos.</div><button class="btn sm" onclick="go('settings')">Add API key</button></div>`}
  <div class="grid2"><button class="tile" onclick="tab('create')"><b>📷</b>Make notes<br><span>Photo to study material</span></button>
  <button class="tile" onclick="tab('revise')"><b>🎯</b>Exam revision<br><span>Cards, quiz, key points</span></button>
@@ -153,7 +155,7 @@ async function generate(){
  busy(study?'Building your study guide… about 30-60 seconds':'Cleaning your notes…');
  try{const t=await claude(sys,[{role:'user',content}],study?7000:3500);
   const d=JSON.parse(t.slice(t.indexOf('{'),t.lastIndexOf('}')+1));
-  const n={id:Date.now(),subject:F.subject,chapter:F.chapter.trim(),mode:F.mode,lang:F.lang,date:today(),d};
+  const n={id:Date.now(),cls:p.cls,subject:F.subject,chapter:F.chapter.trim(),mode:F.mode,lang:F.lang,date:today(),d};
   S.notes.unshift(n);log('note',`Made ${study?'study guide':'clean notes'}: ${n.subject} – ${n.chapter}`);
   imgs=[];F.chapter='';busy();TB=study?'ov':'cn';H=[{v:'home'}];V={v:'note',a:n.id};render()}
  catch(e){busy();toast(e.message&&e.message.includes('JSON')?'Could not read the AI reply. Try clearer photos.':e.message)}}
@@ -163,7 +165,7 @@ const getN=id=>S.notes.find(n=>n.id===id);
 function vNote(){const n=getN(V.a);if(!n)return'<div class="card">Note not found.</div>';const d=n.d;
  const tabs=n.mode==='study'?[['ov','Summary'],['vis','Diagrams'],['qz','MCQs'],['qa','Revision Q&A']]:[['cn','Clean notes'],['sm','Summary']];
  if(!tabs.find(t=>t[0]===TB))TB=tabs[0][0];
- let h=`<div class="card"><h3>${esc(d.title||n.chapter)}</h3><div class="mut">${esc(n.subject)} · ${esc(n.chapter)} · ${n.date}</div></div><div class="tabs">${tabs.map(t=>`<button class="${TB===t[0]?'on':''}" onclick="TB='${t[0]}';render()">${t[1]}</button>`).join('')}</div>`;
+ let h=`<div class="card"><h3>${esc(d.title||n.chapter)}</h3><div class="mut">${esc(n.subject)} · ${esc(n.chapter)} · ${n.date}</div></div><button class="btn" style="margin:0 0 12px" onclick="savePDF(${n.id})">📄 Download PDF</button><div class="tabs">${tabs.map(t=>`<button class="${TB===t[0]?'on':''}" onclick="TB='${t[0]}';render()">${t[1]}</button>`).join('')}</div>`;
  if(TB==='cn')h+=`<div class="card notes">${fmt(d.clean_notes)}</div>`;
  if(TB==='sm')h+=`<div class="card"><h3>Summary</h3><p>${esc(d.summary)}</p></div>`;
  if(TB==='ov')h+=`<div class="card"><h3>Summary</h3><p>${esc(d.summary)}</p></div><div class="card"><h3>Important points</h3><ul class="pts">${(d.points||[]).map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div><div class="card"><h3>Keywords</h3>${(d.keywords||[]).map(k=>`<div class="kw"><b>${esc(k.term)}</b> – ${esc(k.meaning)}</div>`).join('')}</div>`;
@@ -180,6 +182,57 @@ async function shareNote(id){const n=getN(id),text=noteText(n);
  try{const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.Share;
   if(P)await P.share({title:n.chapter,text});else if(navigator.share)await navigator.share({title:n.chapter,text});else{await navigator.clipboard.writeText(text);toast('Copied to clipboard')}}catch(e){}}
 function delNote(id){if(confirm('Delete these notes?')){S.notes=S.notes.filter(n=>n.id!==id);S.quiz=S.quiz.filter(q=>q.id!==id);persist();tab('notes')}}
+/* PROFILE PHOTO */
+const av=(ph,nm,sz)=>`<div class="av" style="width:${sz}px;height:${sz}px;font-size:${sz*.42}px">${ph?`<img src="${ph}">`:esc((nm||'?').trim().charAt(0).toUpperCase()||'?')}</div>`;
+const square=u=>new Promise(res=>{const i=new Image();i.onload=()=>{const s=Math.min(i.width,i.height),c=document.createElement('canvas');c.width=c.height=256;c.getContext('2d').drawImage(i,(i.width-s)/2,(i.height-s)/2,s,s,0,0,256,256);res(c.toDataURL('image/jpeg',.85))};i.onerror=()=>res('');i.src=u});
+async function pickPhoto(){const C=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.Camera;if(!C)return $('#pic').click();
+ try{const p=await C.getPhoto({quality:80,resultType:'base64',source:'PROMPT',promptLabelHeader:'Profile photo',promptLabelPhoto:'Choose from gallery',promptLabelPicture:'Take a photo'});PF.photo=await square('data:image/'+(p.format||'jpeg')+';base64,'+p.base64String);render()}catch(e){}}
+async function picFile(f){if(!f)return;PF.photo=await square(await readFile(f));$('#pic').value='';render()}
+/* PDF */
+function noteBlocks(n){const d=n.d,B=[],a=(t,s)=>{if(s)B.push({t,s:String(s)})};
+ a('h1',d.title||n.chapter);a('sm',`${S.profile.name} · Class ${n.cls||S.profile.cls} · ${n.subject} · ${n.chapter} · ${n.date}`);
+ if(d.clean_notes)d.clean_notes.split('\n').forEach(l=>l.startsWith('## ')?a('h2',l.slice(3)):l.startsWith('- ')?a('li',l.slice(2)):a('p',l.trim()));
+ if(d.summary){a('h2','Summary');a('p',d.summary)}
+ if(d.points&&d.points.length){a('h2','Important points');d.points.forEach(p=>a('li',p))}
+ if(d.keywords&&d.keywords.length){a('h2','Keywords');d.keywords.forEach(k=>a('li',k.term+' – '+k.meaning))}
+ if(d.diagram&&d.diagram.center){a('h2','Concept diagram');a('box',d.diagram.center);(d.diagram.branches||[]).forEach(b=>{a('q',b.label);(b.items||[]).forEach(i=>a('li',i))})}
+ if(d.flowchart&&d.flowchart.length){a('h2','Flowchart');d.flowchart.forEach((s,i,r)=>{a('box',s);if(i<r.length-1)a('arrow','▼')})}
+ if(d.mcqs&&d.mcqs.length){a('h2','MCQs');d.mcqs.forEach((q,i)=>{a('q',`Q${i+1}. ${q.q}`);q.options.forEach((o,j)=>a('p','    '+'ABCD'[j]+'. '+o));a('sm','Answer: '+'ABCD'[q.answer]+' – '+(q.why||''))})}
+ if(d.questions&&d.questions.length){a('h2','Revision questions');d.questions.forEach((q,i)=>{a('q',`Q${i+1}. ${q.q}`);a('p','Ans: '+q.a)})}
+ return B}
+function pdfPages(B){const W=1050,Hh=1485,M=70,FN='"Noto Sans","Noto Sans Oriya","Noto Sans Devanagari",sans-serif',pages=[];let x,y;
+ const np=()=>{const c=document.createElement('canvas');c.width=W;c.height=Hh;x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,W,Hh);x.fillStyle='#7c3aed';x.fillRect(0,0,W,16);y=M;pages.push(c)};
+ const wrap=(s,w)=>{const L=[];let cur='';for(const wd of s.split(' ')){const t=cur?cur+' '+wd:wd;if(x.measureText(t).width<=w)cur=t;else{if(cur)L.push(cur);cur=wd;while(x.measureText(cur).width>w){let k=cur.length;while(k>1&&x.measureText(cur.slice(0,k)).width>w)k--;L.push(cur.slice(0,k));cur=cur.slice(k)}}}L.push(cur);return L};
+ const ST={h1:[44,'700','#12194a'],h2:[32,'700','#7c3aed'],p:[26,'400','#1b1f45'],li:[26,'400','#1b1f45'],q:[26,'700','#1b1f45'],sm:[22,'400','#686c93'],box:[26,'600','#12194a'],arrow:[26,'400','#7c3aed']};
+ np();
+ B.forEach(b=>{const[sz,wt,col]=ST[b.t],lh=sz*1.5,ind=b.t==='li'?40:0,bw=b.t==='box'?W-2*M-240:W-2*M-ind;
+  const f=()=>{x.font=`${wt} ${sz}px ${FN}`};f();
+  const gap=b.t==='h2'?26:b.t==='h1'?0:b.t==='arrow'?0:8;
+  if(b.t==='arrow'){if(y+44>Hh-M)np();x.font=`400 26px ${FN}`;x.fillStyle=col;x.textAlign='center';x.fillText('▼',W/2,y+28);x.textAlign='left';y+=44;return}
+  const L=wrap(b.s,bw),bh=b.t==='box'?L.length*lh+30:L.length*lh;
+  if(y+gap+(b.t==='h2'?lh*2:Math.min(bh,lh*2))>Hh-M)np();
+  f();y+=gap;
+  if(b.t==='box'){const bx=(W-bw)/2-20,w2=bw+40;x.fillStyle='#ede9fe';x.strokeStyle='#7c3aed';x.lineWidth=3;x.beginPath();x.roundRect?x.roundRect(bx,y,w2,bh,18):x.rect(bx,y,w2,bh);x.fill();x.stroke();x.fillStyle=col;x.textAlign='center';L.forEach((l,i)=>x.fillText(l,W/2,y+15+(i+1)*lh-lh*.3));x.textAlign='left';y+=bh;return}
+  L.forEach(l=>{if(y+lh>Hh-M){np();f()}x.fillStyle=col;if(b.t==='li'&&l===L[0])x.fillText('•',M+12,y+lh*.75);x.fillText(l,M+ind,y+lh*.75);y+=lh})});
+ pages.forEach((c,i)=>{const g=c.getContext('2d');g.font=`400 20px ${FN}`;g.fillStyle='#686c93';g.textAlign='center';g.fillText(`AI Notes Maker · page ${i+1} of ${pages.length}`,W/2,Hh-30)});
+ return pages.map(c=>{const u=c.toDataURL('image/jpeg',.85),r=atob(u.split(',')[1]),d=new Uint8Array(r.length);for(let i=0;i<r.length;i++)d[i]=r.charCodeAt(i);return{d,w:c.width,h:c.height}})}
+function mkPDF(J){const E=new TextEncoder(),P=[],O=[];let len=0;
+ const add=v=>{const b=typeof v==='string'?E.encode(v):v;P.push(b);len+=b.length},obj=(n,fn)=>{O[n]=len;add(n+' 0 obj\n');fn();add('\nendobj\n')};
+ add('%PDF-1.4\n');obj(1,()=>add('<< /Type /Catalog /Pages 2 0 R >>'));
+ obj(2,()=>add('<< /Type /Pages /Count '+J.length+' /Kids ['+J.map((_,i)=>(3+3*i)+' 0 R').join(' ')+'] >>'));
+ J.forEach((j,i)=>{const p=3+3*i,c='q 595 0 0 842 0 0 cm /Im0 Do Q';
+  obj(p,()=>add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 ${p+2} 0 R >> >> /Contents ${p+1} 0 R >>`));
+  obj(p+1,()=>add(`<< /Length ${c.length} >>\nstream\n${c}\nendstream`));
+  obj(p+2,()=>{add(`<< /Type /XObject /Subtype /Image /Width ${j.w} /Height ${j.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${j.d.length} >>\nstream\n`);add(j.d);add('\nendstream')})});
+ const xr=len,tot=3+3*J.length;add('xref\n0 '+tot+'\n0000000000 65535 f \n');for(let n=1;n<tot;n++)add(String(O[n]).padStart(10,'0')+' 00000 n \n');
+ add(`trailer\n<< /Size ${tot} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`);
+ const out=new Uint8Array(len);let o=0;P.forEach(b=>{out.set(b,o);o+=b.length});return out}
+const b64=u=>{let s='';for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)};
+async function savePDF(id){const n=getN(id);busy('Making your PDF…');
+ try{await new Promise(r=>setTimeout(r,60));const bytes=mkPDF(pdfPages(noteBlocks(n))),name='Notes_'+(n.subject+'_'+n.chapter).replace(/[^A-Za-z0-9]+/g,'_').slice(0,30)+'_'+String(n.id).slice(-5)+'.pdf',C=window.Capacitor&&Capacitor.Plugins;
+  if(C&&C.Filesystem&&C.Share){const r=await C.Filesystem.writeFile({path:name,data:b64(bytes),directory:'CACHE'});busy();await C.Share.share({title:n.chapter,url:r.uri,dialogTitle:'Save or share your PDF'})}
+  else{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));a.download=name;a.click();busy()}
+  log('note','Downloaded PDF: '+n.chapter)}catch(e){busy();if(!/cancel/i.test(e.message||''))toast('PDF problem: '+e.message)}}
 /* SAVED + REVISE */
 function vNotes(){return S.notes.length?S.notes.map(n=>`<button class="tile" style="width:100%;margin-bottom:10px" onclick="TB='${n.mode==='study'?'ov':'cn'}';go('note',${n.id})"><b style="font-size:17px">${esc(n.chapter)}</b><span>${esc(n.subject)} · ${n.mode==='study'?'Study Guide':'Clean Handwriting'} · ${n.date}</span></button>`).join(''):`<div class="card"><h3>No notes yet</h3><p class="mut">Take a photo of a page to make your first notes.</p><button class="btn" onclick="tab('create')">Make notes</button></div>`}
 function vRevise(){const subs=['All',...new Set(S.notes.map(n=>n.subject))];const l=S.notes.filter(n=>n.mode==='study'&&(RF==='All'||n.subject===RF));
@@ -217,5 +270,12 @@ function vProgress(){const st=stats(),by={};S.quiz.forEach(q=>{(by[q.subject]=by
 /* SETTINGS */
 function vSettings(){return`<div class="card"><h3>Claude API key</h3><p class="mut">Needed for reading photos, notes and the tutor. Get it at console.anthropic.com (an adult must create the account). The key is stored only on this phone.</p><input id="k" type="password" value="${esc(S.key)}" placeholder="sk-ant-…"><label>AI model</label><select id="m"><option value="claude-haiku-5-5" ${S.model==='claude-haiku-5-5'?'selected':''}>Haiku 5.5 (fast, low cost)</option><option value="claude-sonnet-5-5" ${S.model==='claude-sonnet-5-5'?'selected':''}>Sonnet 5.5 (better handwriting)</option></select><button class="btn" onclick="S.key=$('#k').value.trim();S.model=$('#m').value;persist();toast('Saved');tab('home')">Save</button></div>
  <div class="card"><button class="btn sec" onclick="PF=null;go('profile')">Edit profile</button><button class="btn red" onclick="if(confirm('Delete ALL notes, history and profile?')){localStorage.clear();location.reload()}">Reset app</button></div>`}
+let lastBack=0;
+(function(){const A=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.App;if(!A)return;
+ A.addListener('backButton',()=>{if($('#busy').classList.contains('on'))return;
+  if(H.length)return back();
+  if(V.v!=='home'&&S.profile)return tab('home');
+  if(Date.now()-lastBack<2000)return A.exitApp();
+  lastBack=Date.now();toast('Press back again to exit')})})();
 render();
 </script></body></html>
